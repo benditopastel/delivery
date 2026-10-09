@@ -1,24 +1,19 @@
-# MenuFlow Lite — GitHub Pages (etapa 1)
+# MenuFlow — Base GitHub Pages + Google Sheets
 
-Esta versão usa HTML/CSS/JavaScript estáticos e consulta o cardápio no Google Apps Script.
+## Conteúdo
+Frontend original preservado: index.html, admin.html, orders.html, scripts, estilos, imagens e som. `common.js` contém o adaptador de leitura para o Apps Script já implantado.
 
-## Publicação
+## Publicar
+Envie o conteúdo do ZIP (sem pasta intermediária) para a raiz do repositório; configure GitHub Pages na branch principal, pasta `/ (root)`.
 
-Envie **o conteúdo desta pasta** para a raiz do repositório e configure GitHub Pages para publicar a branch principal a partir de `/ (root)`.
+## Situação real
+- Leitura do cardápio: implementada no adaptador, **ainda requer teste no navegador publicado**. Google Apps Script pode bloquear fetch entre origens por CORS/redirecionamentos.
+- Checkout, login administrativo, gravação, upload, fidelidade e monitoramento: **não implementados** no backend novo. O adaptador rejeita essas operações explicitamente; não use este pacote para vendas reais.
+- Admin e central de pedidos são telas preservadas para migração, não estão operacionais.
+- Não há código de servidor Python ou configuração de infraestrutura anterior neste pacote.
 
-## O que funciona
+## Próximo passo técnico
+Validar `fetch` do GitHub Pages à implantação do Apps Script. Se houver erro CORS, usar transporte adequado (por exemplo, proxy/serverless seguro) antes de integrar escrita; JSONP pode ser usado somente para informações públicas e não confidenciais, jamais para autenticação ou pedidos.
 
-- Estrutura visual original do cardápio preservada.
-- Consulta pública ao Google Sheets pela API implantada.
-- Tradução básica das colunas em português para o modelo usado pelo frontend.
-
-## Ainda não funciona nesta etapa
-
-- Finalização de pedidos e cálculo validado no servidor.
-- Login e operações do painel administrativo.
-- Central de pedidos e alarme conectado a pedidos reais.
-- Upload para Drive, fidelidade e resgates.
-
-Os arquivos das telas administrativas foram mantidos para migração, mas **não devem ser utilizados para operação real** até a API autenticada estar pronta. Não adicione senhas nem tokens a arquivos do GitHub.
-
-**Atenção:** o código Apps Script de teste retorna dados públicos sem filtro de campos; não coloque informações privadas nas abas consultadas. Antes de usar em produção, restringir a API pública a colunas permitidas.
+## Segurança
+Não publicar senhas, chaves, tokens administrativos nem dados de clientes no GitHub. Toda alteração e consulta privada deve ser autorizada no servidor.
