@@ -1,73 +1,70 @@
-/** MenuFlow — Google Apps Script (V8). Deploy: web app / Executar como: eu / Acesso: qualquer pessoa. */
-const DB = { categories:['id','name','position','active'], products:['id','name','description','price','category_id','image','active','position','stock'], orders:['id','created_at','customer','phone','delivery','address','payment','notes','items','total','status'], settings:['key','value'] };
-const LOCK_SECONDS = 25;
-function setup() {
-  const p=PropertiesService.getScriptProperties();
-  const spreadsheetId=p.getProperty('SPREADSHEET_ID');
-  if(!spreadsheetId) throw Error('Defina SPREADSHEET_ID nas propriedades do script.');
-  const ss=SpreadsheetApp.openById(spreadsheetId);
-  Object.keys(DB).forEach(k=>{let sh=ss.getSheetByName(k)||ss.insertSheet(k);if(sh.getLastRow()===0)sh.appendRow(DB[k]);sh.setFrozenRows(1)});
-  const sheet=ss.getSheetByName('settings');
-  if(sheet.getLastRow()===1) [['store_name','Bendito Pastel'],['open','true'],['whatsapp',''],['delivery_fee','0'],['pix_key','']].forEach(r=>sheet.appendRow(r));
-  const dir=p.getProperty('DRIVE_FOLDER_ID');if(!dir)throw Error('Defina DRIVE_FOLDER_ID nas propriedades do script.');DriveApp.getFolderById(dir);
-  if(!p.getProperty('ADMIN_PASSWORD'))throw Error('Defina ADMIN_PASSWORD nas propriedades do script.');
-  return 'Estrutura criada com sucesso';
-}
+/** MenuFlow original: GitHub Pages + Sheets + Drive. Propriedades: SPREADSHEET_ID, DRIVE_FOLDER_ID, ADMIN_PASSWORD. */
+const DB={
+ categories:['id','name','description','position','active','image','group_ids'],
+ products:['id','category_id','name','description','price','sale_price','badge','active','stock_enabled','stock','images','addons','position','group_ids'],
+ addons:['id','name','price','active','stock_enabled','stock'],
+ addon_groups:['id','name','required','min_select','max_select','active','position','options','free_label'],
+ orders:['id','customer','phone','delivery','address','payment','items','subtotal','fee','discount','total','status','created_at','change_for','change_amount','coupon'],
+ banners:['id','title','subtitle','image','active','target'],
+ coupons:['id','code','type','value','min_total','active','include_products','exclude_products','include_categories','exclude_categories','exclude_sale','max_discount','usage_limit','per_phone_limit','starts_at','ends_at'],
+ settings:['key','value'],loyalty:['id','phone','points'],rewards:['id','name','kind','product_id','value','points','active']
+};
+const DEFAULTS={store_name:'Minha loja',delivery_fee:'0',free_shipping:'75',open:'true',notice:'Bem-vindo!',primary:'#961406',secondary:'#d5411a',pix_key:''};
 function props(){return PropertiesService.getScriptProperties()}
-function sheet(table){if(!DB[table])throw Error('Tabela inválida');let id=props().getProperty('SPREADSHEET_ID');if(!id)throw Error('SPREADSHEET_ID não configurado');let sh=SpreadsheetApp.openById(id).getSheetByName(table);if(!sh)throw Error('Execute setup() antes de usar');return sh}
-function rows(table){let sh=sheet(table),v=sh.getDataRange().getValues();if(v.length<2)return [];let headers=v[0];return v.slice(1).filter(r=>r[0]!==''&&r[0]!==null).map(r=>Object.fromEntries(headers.map((key,i)=>[key,r[i] instanceof Date?r[i].toISOString():r[i]])))}
-function serialize(table,record){return DB[table].map(key=>{let v=record[key]??'';return typeof v==='string'&&/^[=+@\-\t\r]/.test(v)?"'"+v:v})}
-function append(table,obj){sheet(table).appendRow(serialize(table,obj));return obj}
-function edit(table,id,data){let sh=sheet(table),v=sh.getDataRange().getValues(),index=v.findIndex((r,i)=>i>0&&String(r[0])===String(id));if(index<0)throw Error('Registro não encontrado');let old=Object.fromEntries(DB[table].map((k,i)=>[k,v[index][i]])),item={...old,...data,id:old.id};sh.getRange(index+1,1,1,DB[table].length).setValues([serialize(table,item)]);return item}
-function remove(table,id){let sh=sheet(table),v=sh.getDataRange().getValues(),index=v.findIndex((r,i)=>i>0&&String(r[0])===String(id));if(index<0)throw Error('Registro não encontrado');sh.deleteRow(index+1);return {id}}
-function settings(){return Object.fromEntries(rows('settings').map(r=>[r.key,String(r.value)]))}
-function publicData(){return {categories:rows('categories').filter(r=>String(r.active)!=='false').sort(sortPos),products:rows('products').filter(r=>String(r.active)!=='false').sort(sortPos),settings:settings()}}
-function sortPos(a,b){return Number(a.position||0)-Number(b.position||0)}
-function response(ok,data,error){return {ok:!!ok,data:data??null,error:error?String(error.message||error):undefined}}
-function doGet(e){let action=String(e.parameter.action||'catalog'), callback=String(e.parameter.callback||'');let out;
-  try{if(action!=='catalog')throw Error('Consulta pública indisponível');out=response(true,publicData())}catch(err){out=response(false,null,err)}
-  const json=JSON.stringify(out);if(callback){if(!/^[a-zA-Z_$][\w$]{0,100}$/.test(callback))return ContentService.createTextOutput('Callback inválido');return ContentService.createTextOutput(callback+'('+json+');').setMimeType(ContentService.MimeType.JAVASCRIPT)}
-  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
-}
-function authorized(secret){let valid=props().getProperty('ADMIN_PASSWORD');if(!valid||String(secret||'')!==valid)throw Error('Senha administrativa incorreta')}
-function doPost(e){let nonce=String(e.parameter.nonce||''),result;
-  try{let action=String(e.parameter.action||''),payload=JSON.parse(e.parameter.payload||'{}'),secret=e.parameter.secret||'';
-    if(!action||!payload||typeof payload!=='object'||Array.isArray(payload))throw Error('Requisição inválida');
-    let lock=LockService.getScriptLock();if(!lock.tryLock(LOCK_SECONDS*1000))throw Error('Servidor ocupado, tente novamente');
-    try{result=response(true,dispatch(action,payload,secret))}finally{lock.releaseLock()}
-  }catch(err){result=response(false,null,err)}
-  // HtmlService roda em iframe sandbox: envia confirmação para a página GitHub Pages.
-  let msg=JSON.stringify({channel:'menuflow-response',nonce:nonce,ok:result.ok,data:result.data,error:result.error}).replace(/</g,'\\u003c');
-  return HtmlService.createHtmlOutput('<!doctype html><html><body><script>window.parent.postMessage('+msg+',"*");<\/script></body></html>');
-}
-function dispatch(action,p,secret){if(action==='checkout')return checkout(p);
-  authorized(secret);
-  if(action==='admin_data')return {...publicData(),categories:rows('categories'),products:rows('products'),orders:rows('orders').reverse()};
-  if(action==='save_settings'){
-    let allowed=['store_name','open','whatsapp','delivery_fee','pix_key'];Object.entries(p).forEach(([key,value])=>{if(!allowed.includes(key))return;let old=rows('settings').find(r=>r.key===key);old?editSetting(key,String(value).slice(0,250)):append('settings',{key,value:String(value).slice(0,250)})});return settings();
-  }
-  if(action==='save_category'||action==='save_product'){
-    const table=action==='save_category'?'categories':'products';let name=String(p.name||'').trim().slice(0,140);if(!name)throw Error('Informe o nome');
-    let item={...p,name,active:p.active===false?'false':'true',position:Number(p.position)||0};
-    if(table==='products'){item.price=Number(p.price);if(!Number.isFinite(item.price)||item.price<0)throw Error('Preço inválido');item.stock=Math.max(-1,Math.trunc(Number(p.stock??-1)));item.description=String(p.description||'').slice(0,700);item.image=String(p.image||'').slice(0,500);if(!rows('categories').some(c=>String(c.id)===String(p.category_id)))throw Error('Categoria inexistente')}
-    return p.id?edit(table,p.id,item):append(table,{...item,id:Utilities.getUuid()});
-  }
-  if(action==='delete_category'||action==='delete_product'){
-    let table=action==='delete_category'?'categories':'products';if(table==='categories'&&rows('products').some(r=>String(r.category_id)===String(p.id)))throw Error('Remova primeiro os produtos da categoria');return remove(table,p.id)
-  }
-  if(action==='update_order'){if(!['recebido','preparando','pronto','entrega','concluido','cancelado'].includes(p.status))throw Error('Status inválido');return edit('orders',p.id,{status:p.status})}
-  if(action==='upload_image')return upload(p);
-  throw Error('Operação desconhecida');
-}
-function editSetting(key,value){let sh=sheet('settings'),v=sh.getDataRange().getValues();for(let i=1;i<v.length;i++)if(String(v[i][0])===key){sh.getRange(i+1,2).setValue(value);return}throw Error('Configuração inexistente')}
-function checkout(p){let cfg=settings();if(cfg.open!=='true')throw Error('Loja fechada temporariamente');let customer=String(p.customer||'').trim().slice(0,100),phone=String(p.phone||'').replace(/\D/g,'').slice(0,15);if(customer.length<2||phone.length<10)throw Error('Informe nome e telefone válido');
-  let delivery=['entrega','retirada'].includes(p.delivery)?p.delivery:'retirada';let address=String(p.address||'').trim().slice(0,300);if(delivery==='entrega'&&address.length<8)throw Error('Informe o endereço');
-  if(!Array.isArray(p.items)||p.items.length<1||p.items.length>40)throw Error('Carrinho inválido');let available=rows('products').filter(x=>String(x.active)!=='false');let lines=[],subtotal=0,requested={};
-  for(let entry of p.items){let product=available.find(x=>String(x.id)===String(entry.id)),qty=Number(entry.qty);if(!product||!Number.isInteger(qty)||qty<1||qty>50)throw Error('Produto ou quantidade inválida');let stock=Number(product.stock);requested[product.id]=(requested[product.id]||0)+qty;if(stock>=0&&requested[product.id]>stock)throw Error('Estoque insuficiente: '+product.name);let price=Number(product.price);if(!Number.isFinite(price)||price<0)throw Error('Preço inválido');subtotal+=price*qty;lines.push({id:product.id,name:product.name,qty,price})}
-  let fee=delivery==='entrega'?Math.max(0,Number(cfg.delivery_fee)||0):0,total=Math.round((subtotal+fee)*100)/100;if(total>100000)throw Error('Valor fora do limite');
-  let order={id:String(Date.now())+'-'+Utilities.getUuid().slice(0,6).toUpperCase(),created_at:new Date().toISOString(),customer,phone,delivery,address:delivery==='entrega'?address:'Retirada',payment:String(p.payment||'a combinar').slice(0,60),notes:String(p.notes||'').slice(0,500),items:JSON.stringify(lines),total,status:'recebido'};
-  append('orders',order);
-  for(let id in requested){let product=available.find(x=>String(x.id)===id);if(Number(product.stock)>=0)edit('products',id,{stock:Number(product.stock)-requested[id]})}
-  return {id:order.id,total:order.total,status:order.status,items:lines,pix_key:cfg.pix_key||''};
-}
-function upload(p){let mime=String(p.mime||'');if(!/^image\/(jpeg|png|webp|gif)$/.test(mime))throw Error('Formato de imagem não aceito');let data=String(p.base64||'');if(data.length>6500000)throw Error('Imagem grande demais (máx. 4MB)');let bytes=Utilities.base64Decode(data);if(bytes.length>4500000)throw Error('Imagem grande demais');let folder=DriveApp.getFolderById(props().getProperty('DRIVE_FOLDER_ID'));let ext=mime.split('/')[1].replace('jpeg','jpg');let file=folder.createFile(Utilities.newBlob(bytes,mime,Utilities.getUuid()+'.'+ext));file.setSharing(DriveApp.Access.ANYONE_WITH_LINK,DriveApp.Permission.VIEW);return {url:'https://drive.google.com/thumbnail?id='+file.getId()+'&sz=w1200',id:file.getId()}}
+function ss(){let id=props().getProperty('SPREADSHEET_ID');if(!id)throw Error('Configure SPREADSHEET_ID');return SpreadsheetApp.openById(id)}
+function setup(){const book=ss();Object.entries(DB).forEach(([name,cols])=>{
+ let sh=book.getSheetByName(name)||book.insertSheet(name);if(!sh.getLastRow())sh.appendRow(cols);
+ let existing=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
+ cols.forEach(col=>{if(!existing.includes(col)){sh.getRange(1,++existing.length).setValue(col);existing[existing.length-1]=col}});sh.setFrozenRows(1);
+ });Object.entries(DEFAULTS).forEach(([k,v])=>{if(!(k in settings()))sheet('settings').appendRow([k,v])});
+ let folder=props().getProperty('DRIVE_FOLDER_ID');if(!folder)throw Error('Configure DRIVE_FOLDER_ID');DriveApp.getFolderById(folder);
+ if(!props().getProperty('ADMIN_PASSWORD'))throw Error('Configure ADMIN_PASSWORD');return 'Abas/colunas verificadas sem apagar os registros';}
+function sheet(t){if(!DB[t])throw Error('Tabela inválida');let sh=ss().getSheetByName(t);if(!sh)throw Error('Execute setup()');return sh}
+function rows(t){let values=sheet(t).getDataRange().getValues();if(values.length<2)return [];let headers=values[0].map(String);return values.slice(1).filter(r=>r[0]!==''&&r[0]!==null).map(r=>{let obj={};headers.forEach((h,i)=>{if(h)obj[h]=r[i] instanceof Date?r[i].toISOString():r[i]});for(let k of ['active','required','stock_enabled','exclude_sale'])if(k in obj)obj[k]=obj[k]===true||String(obj[k]).toLowerCase()==='true';return obj})}
+function cleanCell(v){if(v===null||v===undefined)return '';if(typeof v==='object')v=JSON.stringify(v);return typeof v==='string'&&/^[=+@\-\t\r]/.test(v)?"'"+v:v}
+function save(t,id,data,mode){let sh=sheet(t),headers=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);let all=sh.getDataRange().getValues();let index=all.findIndex((r,i)=>i>0&&String(r[0])===String(id));
+ if(mode==='DELETE'){if(index<0)throw Error('Registro não encontrado');sh.deleteRow(index+1);return {ok:true}}
+ if(mode==='PATCH'&&index<0)throw Error('Registro não encontrado');let item=mode==='PATCH'?Object.fromEntries(headers.map((h,i)=>[h,all[index][i]])):{id:id||Utilities.getUuid().slice(0,12)};
+ Object.keys(data||{}).forEach(k=>{if(headers.includes(k)&&k!=='id'&&k!=='key')item[k]=data[k]});if(mode==='PATCH')item.id=id;
+ let vals=headers.map(h=>cleanCell(item[h]));if(index>=0)sh.getRange(index+1,1,1,headers.length).setValues([vals]);else sh.appendRow(vals);return item}
+function settings(){return Object.fromEntries(rows('settings').map(x=>[x.key,String(x.value)]))}
+function updateSettings(data){let sh=sheet('settings'),known=new Set(rows('settings').map(x=>String(x.key)));Object.entries(data).forEach(([k,v])=>{if(!Object.keys(DEFAULTS).includes(k))return;let records=sh.getDataRange().getValues(),i=records.findIndex((r,j)=>j>0&&String(r[0])===k);if(i>=0)sh.getRange(i+1,2).setValue(String(v));else sh.appendRow([k,String(v)])});return settings()}
+function publicData(){return {categories:rows('categories').filter(x=>x.active),products:rows('products').filter(x=>x.active),addons:rows('addons').filter(x=>x.active),addon_groups:rows('addon_groups').filter(x=>x.active),banners:rows('banners').filter(x=>x.active),rewards:rows('rewards').filter(x=>x.active),coupons:[],orders:[],settings:settings()}}
+function response(ok,data,error){return {ok:!!ok,data:data===undefined?null:data,error:error?String(error.message||error):undefined}}
+function resultPut(nonce,result){if(!/^[0-9a-f-]{36}$/.test(nonce))return;let json=JSON.stringify(result),parts=json.match(/[\s\S]{1,24000}/g)||[''];if(parts.length>75)throw Error('Resposta grande demais');let cache=CacheService.getScriptCache();parts.forEach((p,i)=>cache.put('mf:'+nonce+':'+i,p,180));cache.put('mf:'+nonce+':count',String(parts.length),180)}
+function resultGet(nonce){if(!/^[0-9a-f-]{36}$/.test(nonce))throw Error('Identificador inválido');let c=CacheService.getScriptCache(),n=Number(c.get('mf:'+nonce+':count'));if(!n)return {pending:true};let out=[];for(let i=0;i<n;i++){let part=c.get('mf:'+nonce+':'+i);if(part===null)return {pending:true};out.push(part)}return {pending:false,result:JSON.parse(out.join(''))}}
+function doGet(e){let p=(e&&e.parameter)||{},action=String(p.action||'catalog'),callback=String(p.callback||'');let out;try{out=response(true,action==='catalog'?publicData():action==='result'?resultGet(String(p.nonce||'')):(()=>{throw Error('Ação inválida')})())}catch(err){out=response(false,null,err)}let text=JSON.stringify(out);if(callback){if(!/^[a-zA-Z_$][\w$]{0,100}$/.test(callback))return ContentService.createTextOutput('Callback inválido');return ContentService.createTextOutput(callback+'('+text+');').setMimeType(ContentService.MimeType.JAVASCRIPT)}return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON)}
+function authorized(secret){let pw=props().getProperty('ADMIN_PASSWORD');if(!pw||String(secret)!==pw)throw Error('Senha administrativa incorreta')}
+function doPost(e){let p=(e&&e.parameter)||{},nonce=String(p.nonce||''),result;try{let action=String(p.action||''),data=JSON.parse(p.payload||'{}');if(!action||!data||typeof data!=='object'||Array.isArray(data))throw Error('Requisição inválida');let lock=LockService.getScriptLock();if(!lock.tryLock(15000))throw Error('Servidor ocupado');try{result=response(true,dispatch(action,data,String(p.secret||'')))}finally{lock.releaseLock()}}catch(err){result=response(false,null,err)}try{resultPut(nonce,result)}catch(err){console.error(err)}return ContentService.createTextOutput('OK')}
+function dispatch(action,p,secret){if(action==='checkout')return checkout(p);authorized(secret);
+ if(action==='bootstrap')return {...Object.fromEntries(['categories','products','addons','addon_groups','banners','coupons','orders','rewards'].map(k=>[k,rows(k)])),settings:settings()};
+ if(action==='orders_live')return rows('orders');
+ if(action==='settings')return updateSettings(p);
+ if(action==='manage'){if(!['products','categories','addons','addon_groups','banners','coupons','rewards'].includes(p.table))throw Error('Tabela inválida');if(!['POST','PATCH','DELETE'].includes(p.method))throw Error('Método inválido');if(['products','addons'].includes(p.table)&&Number(p.data?.price||0)<0)throw Error('Preço inválido');return save(p.table,p.id,p.data,p.method)}
+ if(action==='reorder'){if(!Array.isArray(p.changes)||p.changes.length>100)throw Error('Reordenação inválida');p.changes.forEach(ch=>{if(!['categories','products'].includes(ch.table))throw Error('Tabela inválida');save(ch.table,ch.id,ch.data,'PATCH')});return {ok:true}}
+ if(action==='order_status')return statusUpdate(p);
+ if(action==='upload')return upload(p);
+ throw Error('Ação não permitida');}
+function ids(v){return String(v||'').split(',').map(x=>x.trim()).filter(Boolean)}
+function numeric(v){let n=Number(v||0);if(!isFinite(n))throw Error('Número inválido');return n}
+function enabled(v){return v===true||String(v).toLowerCase()==='true'}
+function checkout(p){let cfg=settings();if(cfg.open!=='true')throw Error('Loja fechada');let name=String(p.customer||'').trim(),phone=String(p.phone||'').replace(/\D/g,'');if(name.length<2||phone.length<10)throw Error('Informe nome e telefone');if(!Array.isArray(p.items)||!p.items.length||p.items.length>60)throw Error('Carrinho inválido');if(p.delivery==='entrega'&&!String(p.address||'').trim())throw Error('Endereço obrigatório');
+ let products=Object.fromEntries(rows('products').map(x=>[x.id,x])),addons=Object.fromEntries(rows('addons').map(x=>[x.id,x])),groups=Object.fromEntries(rows('addon_groups').map(x=>[x.id,x])),categories=Object.fromEntries(rows('categories').map(x=>[x.id,x]));let normalized=[],used={},subtotal=0;
+ for(let line of p.items){let prod=products[line.id],qty=Number(line.qty);if(!prod||!enabled(prod.active)||!Number.isInteger(qty)||qty<1||qty>30)throw Error('Produto indisponível ou quantidade inválida');used[prod.id]=(used[prod.id]||0)+qty;let extra=0,options=[];
+ for(let aid of [...new Set(line.addons||[])]){let a=addons[aid];if(!a||!enabled(a.active)||!ids(prod.addons).includes(aid))throw Error('Adicional indisponível');used[aid]=(used[aid]||0)+qty;let price=numeric(a.price);if(price<0)throw Error('Preço inválido');extra+=price;options.push({id:aid,name:a.name,price})}
+ let allowed=[...new Set([...ids(prod.group_ids),...ids(categories[prod.category_id]?.group_ids)])],choice=line.choices||{};if(Object.keys(choice).some(id=>!allowed.includes(id)))throw Error('Grupo não pertence ao produto');
+ for(let gid of allowed){let g=groups[gid];if(!g||!enabled(g.active))continue;let opts=JSON.parse(g.options||'[]'),selected=choice[gid]||[],counts={};if(!Array.isArray(selected))throw Error('Escolhas inválidas');for(let v of selected){let id=typeof v==='string'?v:v.id,units=typeof v==='string'?1:Number(v.qty);if(!id||!Number.isInteger(units)||units<1||units>30||counts[id])throw Error('Escolha duplicada/inválida');counts[id]=units}let amount=Object.values(counts).reduce((a,b)=>a+b,0),min=Math.max(numeric(g.min_select),enabled(g.required)?1:0),max=numeric(g.max_select)||opts.length;if(amount<min||amount>max)throw Error('Confira quantidades em '+g.name);
+ for(let [id,units] of Object.entries(counts)){let opt=opts.find(x=>x.id===id);if(!opt||opt.active===false)throw Error('Opção indisponível');let linked=opt.product_id?products[opt.product_id]:null;if(opt.product_id&&(!linked||!enabled(linked.active)))throw Error('Produto vinculado indisponível');let val=opt.price!==''&&opt.price!==null&&opt.price!==undefined?numeric(opt.price):linked?numeric(linked.sale_price||linked.price):0;if(val<0)throw Error('Preço inválido');if(linked)used[linked.id]=(used[linked.id]||0)+qty*units;extra+=val*units;options.push({id,group:g.name,name:opt.name||linked?.name||'',price:val,qty:units})}}
+ let price=numeric(prod.sale_price||prod.price);if(price<0)throw Error('Preço inválido');subtotal+=qty*(price+extra);normalized.push({id:prod.id,name:prod.name,qty,price,addons:options})}
+ for(let [id,count] of Object.entries(used)){let v=products[id]||addons[id];if(enabled(v.stock_enabled)&&numeric(v.stock)<count)throw Error('Estoque insuficiente: '+v.name)}
+ let fee=p.delivery==='entrega'?numeric(cfg.delivery_fee):0;if(p.delivery==='entrega'&&subtotal>=numeric(cfg.free_shipping||999999))fee=0;let discount=0,code=String(p.coupon||'').trim().toUpperCase();
+ if(code){let cup=rows('coupons').find(c=>String(c.code).toUpperCase()===code&&enabled(c.active));if(!cup)throw Error('Cupom inválido');let now=new Date().toISOString();if(cup.starts_at&&now<String(cup.starts_at).replace(' ','T'))throw Error('Cupom ainda não começou');if(cup.ends_at&&now>String(cup.ends_at).replace(' ','T'))throw Error('Cupom expirado');let previous=rows('orders').filter(x=>String(x.coupon||'').toUpperCase()===code&&x.status!=='cancelado');if(numeric(cup.usage_limit)>0&&previous.length>=numeric(cup.usage_limit))throw Error('Cupom esgotado');if(numeric(cup.per_phone_limit)>0&&previous.filter(x=>String(x.phone)===phone).length>=numeric(cup.per_phone_limit))throw Error('Limite de uso por cliente');let ip=ids(cup.include_products),ep=ids(cup.exclude_products),ic=ids(cup.include_categories),ec=ids(cup.exclude_categories),eligible=0;
+ for(let item of normalized){let product=products[item.id],cat=product.category_id;if(ip.length&&!ip.includes(item.id)||ep.includes(item.id)||ic.length&&!ic.includes(cat)||ec.includes(cat)||enabled(cup.exclude_sale)&&numeric(product.sale_price)>0)continue;eligible+=item.qty*(item.price+item.addons.reduce((a,b)=>a+numeric(b.price)*(b.qty||1),0))}if(eligible<=0||subtotal<numeric(cup.min_total))throw Error('Cupom não aplicável');discount=Math.min(eligible,cup.type==='fixed'?numeric(cup.value):eligible*numeric(cup.value)/100);if(numeric(cup.max_discount)>0)discount=Math.min(discount,numeric(cup.max_discount))}
+ let total=Math.round((subtotal+fee-discount)*100)/100;if(p.payment==='dinheiro'&&numeric(p.change_for)>0&&numeric(p.change_for)<total)throw Error('Troco menor que valor total');
+ let order=save('orders','',{customer:name,phone,delivery:p.delivery,address:String(p.address||''),payment:p.payment||'pix',items:JSON.stringify(normalized),subtotal:Math.round(subtotal*100)/100,fee,discount,total,status:'recebido',created_at:new Date().toISOString(),change_for:p.payment==='dinheiro'?numeric(p.change_for):0,change_amount:p.payment==='dinheiro'?Math.max(0,numeric(p.change_for)-total):0,coupon:code},'POST');
+ // Estoque decrementado após registrar o pedido; ScriptLock evita checkout concorrente.
+ for(let [id,count] of Object.entries(used)){let v=products[id]||addons[id];if(enabled(v.stock_enabled))save(products[id]?'products':'addons',id,{stock:numeric(v.stock)-count},'PATCH')}
+ return {id:order.id,total,status:'recebido',pix_key:p.payment==='pix'?cfg.pix_key:null,pix_copy_paste:p.payment==='pix'&&cfg.pix_key?pixCode(cfg.pix_key,total,cfg.store_name):null};}
+function statusUpdate(p){let valid=['recebido','preparando','pronto','em entrega','concluido','cancelado'];if(!valid.includes(p.status))throw Error('Status inválido');let o=rows('orders').find(x=>String(x.id)===String(p.id));if(!o)throw Error('Pedido não encontrado');if(o.status==='concluido'&&p.status!=='concluido')throw Error('Pedido concluído');if(o.status==='cancelado'&&p.status!=='cancelado')throw Error('Pedido cancelado');save('orders',p.id,{status:p.status},'PATCH');if(p.status==='concluido'&&o.status!=='concluido'){let pts=Math.max(0,Math.floor(numeric(o.subtotal)-numeric(o.discount)));let previous=rows('loyalty').find(x=>String(x.phone)===String(o.phone));if(previous)save('loyalty',previous.id,{points:numeric(previous.points)+pts},'PATCH');else save('loyalty','',{phone:o.phone,points:pts},'POST')}return {ok:true}}
+function upload(p){let mime=String(p.mime||'');if(!/^image\/(jpeg|png|webp|gif)$/.test(mime))throw Error('Formato de imagem inválido');let raw=String(p.base64||'');if(raw.length>6000000)throw Error('Imagem acima do limite');let bytes=Utilities.base64Decode(raw);if(bytes.length>4200000)throw Error('Imagem acima de 4 MB');let folder=DriveApp.getFolderById(props().getProperty('DRIVE_FOLDER_ID'));let file=folder.createFile(Utilities.newBlob(bytes,mime,Utilities.getUuid()+'.'+mime.split('/')[1]));file.setSharing(DriveApp.Access.ANYONE_WITH_LINK,DriveApp.Permission.VIEW);let id=file.getId();return {url:'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w1600',thumbnail:'https://drive.google.com/thumbnail?id='+encodeURIComponent(id)+'&sz=w420'}}
+function pixCode(key,amount,name){function field(id,v){return id+String(v.length).padStart(2,'0')+v}function norm(s,max){return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9 .-]/g,'').slice(0,max)}let data=field('00','br.gov.bcb.pix')+field('01',key),payload=field('00','01')+field('26',data)+field('52','0000')+field('53','986')+field('54',numeric(amount).toFixed(2))+field('58','BR')+field('59',norm(name||'LOJA',25))+field('60','BRASIL')+field('62',field('05','***'))+'6304',crc=0xffff;for(let i=0;i<payload.length;i++){crc^=payload.charCodeAt(i)<<8;for(let b=0;b<8;b++)crc=crc&0x8000?(crc<<1^0x1021)&65535:crc<<1&65535}return payload+crc.toString(16).toUpperCase().padStart(4,'0')}

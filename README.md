@@ -1,40 +1,56 @@
-# MenuFlow — GitHub Pages + Google Sheets + Google Drive
+# Cardápio original recuperado — GitHub Pages + Google Sheets + Drive
 
-Sistema de cardápio digital com **catálogo, carrinho, pedidos, painel administrativo, controle de produtos/categorias, estoque, imagens no Drive e central de pedidos**.
+Este pacote preserva o **layout, CSS, HTML e os fluxos do frontend Python** do `cardapio.zip` enviado, substituindo somente o acesso ao FastAPI/Excel por uma integração Apps Script. Os protótipos antigos devem ser usados como referência; **não envie o backend Python, a pasta `data` ou as dependências do FastAPI ao GitHub Pages**.
 
-## Instalação (necessária: o sistema não pode criar/autorizar sua planilha ou implantação sem acesso à sua conta)
+## 1. Apps Script
 
-1. Crie uma **planilha Google Sheets vazia**. Copie seu ID da URL entre `/d/` e `/edit`.
-2. Crie uma **pasta no Google Drive** para imagens. Copie o ID da URL após `/folders/`.
-3. Entre em [script.google.com](https://script.google.com) → Novo projeto → substitua `Code.gs` pelo conteúdo de **`apps-script/Code.gs`** deste pacote.
-4. Em **Configurações do projeto → Propriedades do script**, crie exatamente estas 3 propriedades:
-   - `SPREADSHEET_ID` → ID da planilha
-   - `DRIVE_FOLDER_ID` → ID da pasta
-   - `ADMIN_PASSWORD` → uma **senha forte e exclusiva** (não coloque em arquivos do GitHub)
-5. No editor do Apps Script, selecione a função `setup` e clique **Executar**. Autorize acesso ao Google Sheets e Drive. A função cria as abas e configurações padrão.
-6. Clique em **Implantar → Nova implantação → Aplicativo da Web**. Escolha **Executar como: Eu** e **Quem tem acesso: Qualquer pessoa** (necessário para receber pedidos públicos). Confirme e copie a URL terminada em `/exec`.
-7. Edite `config.js`, substituindo `COLE_AQUI_A_URL_DO_APPS_SCRIPT_EXEC` pela URL `/exec`. Não coloque senhas, IDs secretos nem tokens nesse arquivo.
-8. No GitHub crie um repositório e envie **o conteúdo desta pasta** à raiz (não a pasta `MenuFlow-Pronto`). Em **Settings → Pages**, escolha **Deploy from a branch**, branch `main`, pasta `/(root)`. Use a URL gerada pelo GitHub Pages.
-9. Abra `admin.html` no endereço publicado e entre com `ADMIN_PASSWORD`. Crie ao menos uma categoria, cadastre produtos e configure nome, abertura e taxa de entrega. `index.html` é o cardápio público e `orders.html` é a central de pedidos.
+No projeto Apps Script **já conectado à sua planilha**, atualize o conteúdo de `Code.gs` com `apps-script/Code.gs`. Crie também o arquivo `LegacyData.gs` e cole o conteúdo de `apps-script/LegacyData.gs` (opcional, para importar os dados de exemplo e pedidos históricos do Excel enviado).
 
-### Atualização do Apps Script
-Sempre que modificar o `Code.gs`, vá a **Implantar → Gerenciar implantações → Editar → Nova versão → Implantar**. A URL `/exec` permanece a mesma se você editar a implantação existente.
+As **Propriedades do script** devem continuar exatamente como já foram cadastradas:
 
-## Segurança e limites
+- `SPREADSHEET_ID` — ID da planilha existente
+- `DRIVE_FOLDER_ID` — ID da pasta das imagens
+- `ADMIN_PASSWORD` — senha usada na administração
 
-- O administrador informa sua senha ao usar `admin.html`; a senha **não fica no GitHub** e é guardada somente na sessão do navegador (`sessionStorage`). Feche a sessão em um computador compartilhado. Recomenda-se usar uma senha longa, exclusiva, e HTTPS (Pages já usa HTTPS).
-- **Atenção:** esse é um aplicativo simples para pequenas operações. A senha compartilhada não oferece usuários com perfis distintos, MFA, bloqueio por tentativas ou prevenção avançada de abuso. O endpoint de checkout é público por necessidade e pode receber spam; acompanhe a planilha e as cotas do Google Apps Script.
-- Dados de clientes e pedidos permanecem privados na planilha e só podem ser consultados pelo painel com senha. O catálogo público usa JSONP apenas para dados públicos; as escritas usam formulário POST + iframe com resposta `postMessage`, evitando problemas de CORS no GitHub Pages.
-- As imagens enviadas são disponibilizadas pelo Drive por link público de visualização. NÃO envie imagens confidenciais. O Drive pode ter limitações de exibição/bloqueios por permissão ou quota.
-- A taxa de entrega configurada é única (não depende do bairro). Pagamento Pix é apenas a **exibição da chave**, sem confirmação automática. Não há gateway de pagamento, entregador, cupons ou fidelidade nesta versão.
-- O estoque `-1` significa ilimitado. A validação do pedido e o recálculo do preço são feitos no servidor. O Google Apps Script impõe cotas, limites e disponibilidade próprios.
-- O envio de fotos pelo painel aceita JPG, PNG, WebP e GIF com tamanho máximo de 4 MB.
-- Não compartilhe a senha de administração por e-mail público nem em capturas de tela.
+Execute `setup()` uma vez. Esse processo **cria abas e acrescenta colunas ausentes sem excluir as linhas que você já tem**. Para incorporar também o conteúdo histórico do arquivo Excel, execute **`importLegacyData()`**: essa rotina só inclui IDs/chaves que não existem; não substitui registros atuais. Os pedidos importados da versão local são dados históricos: revise-os antes de abrir a operação real.
 
-## Diagnóstico
+**Importante:** `setup` amplia o layout das abas. Não exclua as abas já existentes e não reordene colunas manualmente. Mantenha a planilha privada.
 
-Se aparecer “Configure a URL”, atualize `config.js` com o link `/exec`. Se uma escrita retornar “Sem resposta”, confira implantação pública como “Executar como Eu”, permissões Google, console do navegador, e a versão do deployment. Se imagens não renderizarem, confira as restrições de compartilhamento do Drive. Se ocorrer erro de acesso à planilha, execute `setup` e confirme que os IDs e permissões estão corretos.
+## 2. Publicar o Apps Script
 
-## Arquivos
+Implantar > Gerenciar implantações > Editar > **Nova versão** > Aplicativo da Web > Executar como **Eu** > Quem tem acesso **Qualquer pessoa**. Copie a URL que termina em `/exec`.
 
-`index.html` + `app.js`: cliente; `admin.html` + `admin.js`: painel; `orders.html` + `orders.js`: pedidos; `api.js`: comunicação; `config.js`: URL da API; `style.css`: visual; `apps-script/Code.gs`: backend; `imagens/`: imagens originais disponibilizadas como referência.
+## 3. GitHub Pages
+
+Edite apenas o arquivo `config.js` e cole sua URL `/exec` em `apiUrl`. Coloque **todos os arquivos da raiz deste pacote**, inclusive `imagens/`, em uma pasta pública do repositório (preferencialmente raiz). Em Settings > Pages, escolha Branch `main`, pasta `/ (root)`. Acesse `index.html`, `admin.html` e `orders.html` pela URL do GitHub Pages.
+
+Nenhuma senha ou ID privado deve ser escrito em `config.js`. **Nunca envie as Propriedades do Script ao GitHub.**
+
+## 4. Recursos do layout original mantidos
+
+Cardápio, busca, categorias, galeria, estoque, promoções, complementos avulsos, grupos de escolhas opcionais e obrigatórios, carrinho e checkout em etapas, cupons, Pix copia-e-cola, banners, painel de gestão, relatório inicial, ordenação arrastando, central de pedidos com áudio, status, pontos e catálogo de recompensas. As telas foram mantidas no desenho original; a camada de dados foi adaptada ao Sheets.
+
+Imagens *novas* enviadas no painel são salvas na pasta indicada no Drive. As imagens locais legadas também estão incluídas em `imagens/` como arquivos estáticos, e URLs antigas `/uploads/nome.webp` são reconhecidas quando exibidas pelo catálogo.
+
+## 5. Limites e verificação necessária
+
+- **Não há testes ponta a ponta contra a sua conta Google nesta entrega.** É necessário verificar na implantação real: login, cadastro, upload, pedido com complementos, cupons, estoque, Pix, mudança de status e pontos.
+- O Apps Script não fornece a mesma transação de banco de dados que PostgreSQL. Usa-se `LockService` para serializar gravações concorrentes, mas um erro do Google depois de registrar pedido e antes de atualizar estoque ainda pode exigir correção manual.
+- Uploads usam até 4 MB; o Apps Script não realiza o processamento WebP/EXIF que o backend Python fazia. Use imagens já redimensionadas quando possível.
+- Resgate de pontos pela interface pública **permanece desativado**, tal como no protótipo, até haver validação segura da identidade do cliente.
+- A autenticação por senha compartilhada é uma proteção básica. Para uso de alto volume, dados sensíveis de clientes ou equipe com permissões, recomenda-se um backend autenticado dedicado.
+- O transporte de operações do Apps Script usa POST + consulta de resultado por identificador temporário. O navegador não recebe a resposta diretamente via CORS; por isso, em falhas de rede, confira a planilha antes de repetir um pedido ou salvamento.
+- A exibição de imagens públicas via URL do Google Drive depende das regras de compartilhamento e da disponibilidade do endpoint de miniaturas do Google.
+- Pix gera um código de pagamento, **não confirma recebimento automaticamente**. Status e conciliação são manuais.
+
+## 6. Teste recomendado
+
+1. Confirme `setup()` e, opcionalmente, `importLegacyData()`.
+2. Confira no GitHub Pages se categorias, produtos e banners aparecem.
+3. Entre em `admin.html` com a senha de `ADMIN_PASSWORD`.
+4. Crie uma categoria e produto de teste, envie imagem e confira o Drive e as abas.
+5. Teste pedido de retirada e entrega, cupom, complemento e grupo obrigatório.
+6. Confira valores, pedido e estoque no Sheets.
+7. Em `orders.html`, marque pedido como concluído e confira os pontos.
+
+Se o login não responder, verifique **Apps Script > Execuções** e a versão da implantação, depois a aba Rede do navegador. **Não execute `importLegacyData()` repetidamente para testes**, mesmo sendo idempotente por chave.
