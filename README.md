@@ -17,3 +17,15 @@ Validar `fetch` do GitHub Pages à implantação do Apps Script. Se houver erro 
 
 ## Segurança
 Não publicar senhas, chaves, tokens administrativos nem dados de clientes no GitHub. Toda alteração e consulta privada deve ser autorizada no servidor.
+
+
+## Correção de leitura pública (JSONP)
+
+O `common.js` consulta `?action=cardapio&callback=...` por meio de uma tag `script`,
+pois o `fetch` direto ao Apps Script pode falhar por CORS/redirecionamento.
+
+Apenas `/bootstrap` GET está implementado. **Não usar JSONP para dados privados,
+autenticação, checkout ou escrita.** Essas funcionalidades continuam pendentes.
+
+Para publicar: envie os arquivos da raiz deste ZIP para a raiz do repositório
+GitHub Pages. Não publique como loja operacional até concluir o backend de pedidos.

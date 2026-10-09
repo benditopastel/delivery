@@ -53,18 +53,46 @@ export async function api(path, options = {}) {
     );
   }
 
-  const response = await fetch(`${API_URL}?action=cardapio`, {
-    method: 'GET',
-    redirect: 'follow'
+  // JSONP funciona para leitura pública em Apps Script, sem CORS.
+  // Não usar este transporte para login, pedidos ou gravações.
+  const result = await new Promise((resolve, reject) => {
+    const callbackName = `MenuFlowCallback_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+    const script = document.createElement('script');
+    let settled = false;
+
+    function cleanup() {
+      clearTimeout(timeoutId);
+      script.remove();
+      delete window[callbackName];
+    }
+
+    function finish(error, data) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve(data);
+    }
+
+    window[callbackName] = data => finish(null, data);
+
+    script.onerror = () => finish(
+      new Error('Não foi possível carregar o cardápio do Google Apps Script.')
+    );
+
+    const timeoutId = setTimeout(() => finish(
+      new Error('A consulta do cardápio demorou demais. Tente novamente.')
+    ), 15000);
+
+    const url = new URL(API_URL);
+    url.searchParams.set('action', 'cardapio');
+    url.searchParams.set('callback', callbackName);
+    script.src = url.toString();
+    document.head.appendChild(script);
   });
 
-  if (!response.ok) {
-    throw new Error('Não foi possível carregar o cardápio.');
-  }
-
-  const result = await response.json();
-  if (!result.sucesso) {
-    throw new Error(result.erro || 'Erro ao consultar o cardápio.');
+  if (!result || !result.sucesso) {
+    throw new Error(result?.erro || 'Erro ao consultar o cardápio.');
   }
 
   return normalizePublicData(result.dados || {});
