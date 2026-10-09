@@ -9,7 +9,9 @@ from .store import SHEETS
 class SupabaseStore:
     def __init__(self):
         self.url = os.environ['SUPABASE_URL'].rstrip('/') + '/rest/v1'
-        self.key = os.environ['SUPABASE_SERVICE_ROLE_KEY']
+        self.key = os.environ.get('SUPABASE_SERVICE_ROLE_KEY') or os.environ.get('SUPABASE_KEY')
+        if not self.key:
+            raise RuntimeError('Configure SUPABASE_SERVICE_ROLE_KEY no Render')
 
     def _request(self, path, method='GET', payload=None, headers=None):
         data = json.dumps(payload).encode() if payload is not None else None

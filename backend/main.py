@@ -13,7 +13,7 @@ from .store import ExcelStore,SHEETS
 
 ROOT=Path(__file__).resolve().parent.parent
 # Set STORAGE_BACKEND=supabase only after creating the schema and migrating data.
-if os.environ.get('STORAGE_BACKEND', 'excel').lower() == 'supabase':
+if os.environ.get('STORAGE_BACKEND', os.environ.get('DATABASE_PROVIDER', 'excel')).lower() == 'supabase':
  from .supabase_store import SupabaseStore
  store = SupabaseStore()
 else:
