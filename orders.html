@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+ <head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width,initial-scale=1" name="viewport"/>
+  <title>
+   Central de pedidos · MenuFlow
+  </title>
+  <link href="./style.css" rel="stylesheet"/>
+  <style>
+   body{background:#f7f5f3;padding:24px}.orders-head{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}.orders-columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:20px}.order-column{background:#fff;border-radius:18px;padding:16px;min-height:60vh}.order-column h2{font-size:18px}.order-ticket{border:1px solid #eee2dc;border-radius:13px;padding:15px;margin:12px 0}.order-ticket p{font-size:13px}.order-ticket .primary,.order-ticket .outline{margin:5px 5px 0 0}.order-muted{font-size:12px;color:#746a66}.orders-head label{display:flex;align-items:center;gap:6px}@media(max-width:850px){.orders-columns{grid-template-columns:1fr}body{padding:12px}.order-column{min-height:150px}}
+  </style>
+ </head>
+ <body>
+  <header class="orders-head">
+   <div>
+    <h1>
+     Central de pedidos
+    </h1>
+    <p class="order-muted">
+     Atualização automática a cada 5 segundos, sem recarregar a página · O alarme toca até aceitar os pedidos
+    </p>
+   </div>
+   <div class="row">
+    <label>
+     <input checked="" id="sound" type="checkbox"/>
+     Alerta sonoro
+    </label>
+    <button class="outline" id="enable-sound">
+     Ativar som
+    </button>
+    <button class="outline" id="refresh">
+     Atualizar agora
+    </button>
+    <a class="outline" href="/admin">
+     Voltar ao painel
+    </a>
+   </div>
+  <p class="order-muted" id="monitor-status" role="status" aria-live="polite">Iniciando monitor...</p>
+  </header>
+  <main class="orders-columns">
+   <section class="order-column">
+    <h2>
+     Pedidos
+     <span id="count-new">
+     </span>
+    </h2>
+    <div id="new">
+    </div>
+   </section>
+   <section class="order-column">
+    <h2>
+     Em preparação
+    </h2>
+    <div id="preparing">
+    </div>
+   </section>
+   <section class="order-column">
+    <h2>
+     Entrega / retirada
+    </h2>
+    <div id="delivery">
+    </div>
+   </section>
+  </main>
+  <audio id="alert" preload="none" src="./alert.mp3">
+  </audio>
+  <script src="./orders.js" type="module">
+  </script>
+ </body>
+</html>
+
