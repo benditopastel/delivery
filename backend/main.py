@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -8,7 +8,8 @@ from PIL import Image,ImageOps
 from io import BytesIO
 from uuid import uuid4
 from datetime import datetime
-import json,math,os,unicodedata
+import json,math,os,unicodedata,hashlib,hmac,secrets,time,html
+from urllib.parse import urlsplit
 from .store import ExcelStore,SHEETS
 
 ROOT=Path(__file__).resolve().parent.parent
@@ -19,6 +20,75 @@ if os.environ.get('STORAGE_BACKEND', os.environ.get('DATABASE_PROVIDER', 'excel'
 else:
  store = ExcelStore(ROOT/'data'/'cardapio.xlsx')
 app=FastAPI(title='Cardápio Digital — Protótipo')
+
+# Single-owner administrator authentication. Configure ADMIN_PASSWORD and SESSION_SECRET in Render.
+ADMIN_PASSWORD=os.environ.get('ADMIN_PASSWORD','')
+SESSION_SECRET=os.environ.get('SESSION_SECRET','')
+if not ADMIN_PASSWORD or not SESSION_SECRET or len(SESSION_SECRET)<32:
+ raise RuntimeError('Configure ADMIN_PASSWORD e SESSION_SECRET (32+ caracteres) no Render')
+
+def _signed_session():
+ stamp=str(int(time.time()))
+ sig=hmac.new(SESSION_SECRET.encode(),stamp.encode(),hashlib.sha256).hexdigest()
+ return stamp+'.'+sig
+
+def _authorized(request:Request):
+ try:
+  stamp,sig=request.cookies.get('mf_admin','').split('.',1)
+  if abs(time.time()-int(stamp))>12*3600:return False
+  expected=hmac.new(SESSION_SECRET.encode(),stamp.encode(),hashlib.sha256).hexdigest()
+  return hmac.compare_digest(sig,expected)
+ except (ValueError,TypeError):return False
+
+def _require_admin(request:Request):
+ if not _authorized(request):raise HTTPException(401,'Autenticação administrativa necessária')
+
+LOGIN_PAGE='<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar · MenuFlow</title><style>body{font-family:system-ui;background:#f7f3f0;display:grid;place-items:center;min-height:100vh;margin:0}form{background:white;padding:32px;border-radius:18px;box-shadow:0 8px 35px #0001;max-width:350px;width:85%}h1{color:#961406}input,button{box-sizing:border-box;width:100%;padding:13px;border-radius:9px;margin:8px 0}input{border:1px solid #ccc}button{border:0;background:#961406;color:white;font-weight:bold;cursor:pointer}</style><form method="post" action="/admin/login"><h1>MenuFlow</h1><p>Acesso administrativo</p><label>Senha<input type="password" name="password" required autocomplete="current-password"></label><button>Entrar</button></form></html>'
+
+@app.middleware('http')
+async def security_gate(request:Request,call_next):
+ path=request.url.path
+ # Protect all administration mutations and private reads, regardless of the HTML page.
+ protected=(path in ('/admin','/pedidos','/api/admin/bootstrap','/api/orders/live')
+  or path.startswith('/api/manage/') or path.startswith('/api/orders/')
+  or path in ('/api/reorder','/api/settings','/api/upload')
+  or (path.startswith('/api/') and path.removeprefix('/api/') in ('orders','loyalty')))
+ if protected and not _authorized(request):
+  if path in ('/admin','/pedidos'):
+   return RedirectResponse('/admin/login',status_code=303)
+  return JSONResponse({'detail':'Autenticação administrativa necessária'},status_code=401)
+ # Browser-origin validation prevents cross-site form submission using admin cookies.
+ if request.method in ('POST','PATCH','PUT','DELETE') and protected:
+  origin=request.headers.get('origin')
+  if origin and (urlsplit(origin).netloc.lower()!=request.headers.get('host','').lower() or urlsplit(origin).scheme!='https'):
+   return JSONResponse({'detail':'Origem não permitida'},status_code=403)
+ response=await call_next(request)
+ if path.startswith('/api/') or path.startswith('/admin') or path=='/pedidos':
+  response.headers['Cache-Control']='no-store'
+ return response
+
+@app.get('/admin/login',response_class=HTMLResponse)
+def login_form(request:Request):
+ if _authorized(request):return RedirectResponse('/admin',status_code=303)
+ return HTMLResponse(LOGIN_PAGE)
+
+@app.post('/admin/login')
+async def login_submit(request:Request):
+ from urllib.parse import parse_qs
+ raw=(await request.body()).decode('utf-8')
+ password=parse_qs(raw).get('password',[''])[0]
+ if not hmac.compare_digest(password.encode(),ADMIN_PASSWORD.encode()):
+  return HTMLResponse(LOGIN_PAGE.replace('Acesso administrativo','Senha incorreta. Tente novamente.'),status_code=401)
+ response=RedirectResponse('/admin',status_code=303)
+ response.set_cookie('mf_admin',_signed_session(),httponly=True,secure=True,samesite='strict',max_age=12*3600,path='/')
+ return response
+
+@app.post('/admin/logout')
+def logout():
+ response=RedirectResponse('/admin/login',status_code=303)
+ response.delete_cookie('mf_admin',path='/')
+ return response
+
 app.mount('/assets',StaticFiles(directory=ROOT/'frontend'),name='assets')
 app.mount('/uploads',StaticFiles(directory=ROOT/'uploads'),name='uploads')
 
@@ -29,10 +99,13 @@ def admin():return FileResponse(ROOT/'frontend'/'admin.html')
 @app.get('/pedidos')
 def order_page():return FileResponse(ROOT/'frontend'/'orders.html')
 @app.get('/api/bootstrap')
-def bootstrap():return {**{k:store.all(k) for k in ['categories','products','addons','addon_groups','banners','coupons','orders','rewards']},'settings':store.settings()}
+def bootstrap():return {**{k:store.all(k) for k in ['categories','products','addons','addon_groups','banners','coupons','rewards']},'settings':store.settings()}
+@app.get('/api/admin/bootstrap')
+def admin_bootstrap():return {**{k:store.all(k) for k in ['categories','products','addons','addon_groups','banners','coupons','orders','rewards']},'settings':store.settings()}
 @app.get('/api/{table}')
 def get_table(table:str):
  if table not in SHEETS:raise HTTPException(404,'Tabela inválida')
+ if table not in ('categories','products','addons','addon_groups','banners','coupons','rewards'):raise HTTPException(401,'Acesso restrito')
  return store.all(table)
 @app.post('/api/manage/{table}')
 async def create(table:str,request:Request):
