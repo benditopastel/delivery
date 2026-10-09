@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MenuFlow | Teste de comunicação</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; max-width: 650px; margin: 4rem auto; padding: 0 1rem; }
+    button { background: #961406; border: 0; color: #fff; padding: .9rem 1.2rem; border-radius: 8px; cursor: pointer; }
+    pre { white-space: pre-wrap; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <h1>MenuFlow — teste de POST</h1>
+  <p>Este teste não envia senhas nem pedidos e não altera a planilha.</p>
+  <button id="testar">Enviar teste</button>
+  <pre id="resultado" role="status"></pre>
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzTbSY3jkeBrmyOQGeSiHSn2l0XSY7pXg68ILHaDkqAqcaV8baVi4Ec6Btbr1j8lQPc/exec';
+
+    document.getElementById('testar').addEventListener('click', async () => {
+      const resultado = document.getElementById('resultado');
+      resultado.textContent = 'Enviando…';
+
+      try {
+        await fetch(API_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            acao: 'teste_conexao',
+            mensagem: 'teste-menuflow'
+          })
+        });
+
+        resultado.textContent =
+          'O navegador concluiu a tentativa de envio. ' +
+          'Isso NÃO confirma que o Apps Script recebeu. ' +
+          'Abra Execuções no Apps Script e procure MENUPING_POST_RECEBIDO.';
+      } catch (erro) {
+        resultado.textContent = 'Falha de rede: ' + erro.message;
+      }
+    });
+  </script>
+</body>
+</html>
