@@ -1,0 +1,2 @@
+[functions.menuflow]
+verify_jwt = false

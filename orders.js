@@ -1,5 +1,5 @@
 import { api, money, esc, notify, auth, signout } from './common.js';
-import {getSecret} from './transport.js';
+import {getSecret,login} from './transport.js';
 let known = null, activated = false, audioContext = null, busy = false;
 const byId = id => document.getElementById(id);
 async function beep() { if (!activated || !byId('sound').checked)
@@ -59,8 +59,7 @@ catch {
     notify('Seu navegador bloqueou o áudio');
 } };
 byId('refresh').onclick = refresh;
-if(!getSecret()){const pw=prompt('Senha administrativa para visualizar pedidos:');if(pw)auth(pw)}
-refresh();
+if(!getSecret()){ document.body.innerHTML='<main style="max-width:360px;margin:10vh auto;font-family:system-ui"><h1>Acesso administrativo</h1><form id="order-login"><input name="email" type="email" autocomplete="username" placeholder="E-mail" required style="display:block;width:100%;padding:12px;margin:10px 0"><input name="password" type="password" autocomplete="current-password" placeholder="Senha" required style="display:block;width:100%;padding:12px;margin:10px 0"><button style="padding:12px">Entrar</button><p id="order-error" role="alert"></p></form></main>';document.getElementById('order-login').onsubmit=async e=>{e.preventDefault();try{await login(e.target.elements.email.value,e.target.elements.password.value);location.reload()}catch(err){document.getElementById('order-error').textContent=err.message}} } else refresh();
 setInterval(() => { if (!document.hidden)
     refresh(); }, 30000);
 
