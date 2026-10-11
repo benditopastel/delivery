@@ -46,3 +46,6 @@ html{overflow-anchor:none}
 }
 .footer-banner h2,.footer-banner p { color: white; }
 #menu { touch-action: pan-y; contain: layout style; }
+
+.mf-loading body::before{content:"";position:fixed;top:0;left:0;height:3px;width:40%;background:var(--accent,#d5411a);z-index:1000;animation:mfbar 1s ease-in-out infinite}@keyframes mfbar{0%{left:-40%}100%{left:100%}}
+.catalog-product .secondary{white-space:nowrap;padding:8px 12px;font-size:13px}.catalog-heading .primary,.catalog-heading .secondary{white-space:nowrap}

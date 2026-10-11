@@ -1,72 +1,97 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
- <head>
-  <meta charset="utf-8"/>
-  <meta content="width=device-width,initial-scale=1" name="viewport"/>
-  <title>
-   Central de pedidos · MenuFlow
-  </title>
-  <link href="./style.css" rel="stylesheet"/>
-  <style>
-   body{background:#f7f5f3;padding:24px}.orders-head{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}.orders-columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:20px}.order-column{background:#fff;border-radius:18px;padding:16px;min-height:60vh}.order-column h2{font-size:18px}.order-ticket{border:1px solid #eee2dc;border-radius:13px;padding:15px;margin:12px 0}.order-ticket p{font-size:13px}.order-ticket .primary,.order-ticket .outline{margin:5px 5px 0 0}.order-muted{font-size:12px;color:#746a66}.orders-head label{display:flex;align-items:center;gap:6px}@media(max-width:850px){.orders-columns{grid-template-columns:1fr}body{padding:12px}.order-column{min-height:150px}}
-  </style>
- <script src="./config.js"></script>
- </head>
- <body>
-  <header class="orders-head">
-   <div>
-    <h1>
-     Central de pedidos
-    </h1>
-    <p class="order-muted">
-     Atualização automática a cada 30 segundos, sem recarregar a página
-    </p>
-   </div>
-   <div class="row">
-    <label>
-     <input checked="" id="sound" type="checkbox"/>
-     Alerta sonoro
-    </label>
-    <button class="outline" id="enable-sound">
-     Ativar som
-    </button>
-    <button class="outline" id="refresh">
-     Atualizar agora
-    </button>
-    <a class="outline" href="./admin.html">
-     Voltar ao painel
-    </a>
-   </div>
-  </header>
-  <main class="orders-columns">
-   <section class="order-column">
-    <h2>
-     Pedidos
-     <span id="count-new">
-     </span>
-    </h2>
-    <div id="new">
-    </div>
-   </section>
-   <section class="order-column">
-    <h2>
-     Em preparação
-    </h2>
-    <div id="preparing">
-    </div>
-   </section>
-   <section class="order-column">
-    <h2>
-     Entrega / retirada
-    </h2>
-    <div id="delivery">
-    </div>
-   </section>
-  </main>
-  <audio id="alert" preload="none" src="./alert.mp3">
-  </audio>
-  <script src="./orders.js" type="module">
-  </script>
- </body>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Central de pedidos</title>
+<link rel="preconnect" href="https://dedbrpfewhcpfjxkgmaq.supabase.co" crossorigin/>
+<style>
+:root{--brand:#961406;--accent:#d5411a;--bg:#f3efec;--card:#fff;--ink:#241f1d;--muted:#7a6f6a;--line:#eadfd8;--ok:#1f8a4c;--warn:#d98a00;--bad:#c62828}
+*{box-sizing:border-box}html,body{margin:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+button{font:inherit;cursor:pointer;border:0;border-radius:11px;padding:11px 16px;font-weight:700}
+button:disabled{opacity:.55;cursor:wait}
+.mf-loading body::before{content:"";position:fixed;top:0;left:0;height:3px;width:40%;background:var(--accent);z-index:1000;animation:bar 1s ease-in-out infinite}
+@keyframes bar{0%{left:-40%}100%{left:100%}}
+.topbar{position:sticky;top:0;z-index:20;background:#241f1d;color:#fff;padding:12px 20px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+.topbar h1{font-size:19px;margin:0}
+.chip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;padding:5px 11px;border-radius:99px;background:#ffffff1c}
+.chip i{width:9px;height:9px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 0 #4ade80aa;animation:live 2s infinite}
+.chip.err i{background:#f87171;animation:none}
+@keyframes live{70%{box-shadow:0 0 0 7px #4ade8000}100%{box-shadow:0 0 0 0 #4ade8000}}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.controls label{display:flex;align-items:center;gap:6px;font-size:13px}
+.controls select{padding:7px 8px;border-radius:9px;border:0}
+.btn-light{background:#ffffff22;color:#fff;padding:8px 13px;font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px 0}
+.stat{background:var(--card);border-radius:14px;padding:12px 16px;border-bottom:4px solid var(--line)}
+.stat b{display:block;font-size:26px;line-height:1.1}.stat span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.stat.s-new{border-color:var(--bad)}.stat.s-prep{border-color:var(--warn)}.stat.s-out{border-color:#2f6fdf}.stat.s-done{border-color:var(--ok)}
+.board{display:grid;grid-template-columns:repeat(4,minmax(260px,1fr));gap:14px;padding:16px 20px 40px;align-items:start;overflow-x:auto}
+.col{background:#e9e2dd;border-radius:16px;padding:12px;min-height:50vh}
+.col h2{font-size:14px;text-transform:uppercase;letter-spacing:.05em;margin:4px 6px 12px;display:flex;justify-content:space-between;align-items:center}
+.col h2 em{font-style:normal;background:#241f1d;color:#fff;border-radius:99px;padding:2px 10px;font-size:12px}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:30px 10px}
+.ticket{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px;border-left:6px solid var(--line);box-shadow:0 1px 3px #0001}
+.ticket.st-recebido{border-color:var(--bad);animation:pulse 1.4s infinite}
+.ticket.st-preparando{border-color:var(--warn)}.ticket.st-pronto,.ticket.st-em-entrega{border-color:#2f6fdf}
+.ticket.st-concluido{border-color:var(--ok);opacity:.78}.ticket.st-cancelado{border-color:#999;opacity:.6}
+@keyframes pulse{0%,100%{box-shadow:0 1px 3px #0001}50%{box-shadow:0 0 0 4px #c6282833}}
+.th{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.th .id{font-size:20px;font-weight:800}
+.ago{font-size:12.5px;color:var(--muted);font-weight:600}.ago.late{color:var(--bad)}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.tag{font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:99px;background:#f2e9e4}
+.tag.del{background:#e3edff;color:#1d4fb8}.tag.pick{background:#e5f6ea;color:#17703c}
+.who{font-size:14px;margin:2px 0 8px}.who a{color:var(--brand);font-weight:700;text-decoration:none}
+.items{list-style:none;margin:0 0 8px;padding:10px 12px;background:#faf6f3;border-radius:10px;font-size:14px}
+.items>li{margin:5px 0}.items b{color:var(--brand)}
+.opts{list-style:none;margin:2px 0 0 18px;padding:0;font-size:12.5px;color:#5c514c}.opts .g{color:var(--muted)}
+.obs{font-size:12.5px;background:#fff3cd;border-radius:7px;padding:4px 8px;margin-top:4px}
+.addr{font-size:13px;margin:6px 0}.addr a{color:#1d4fb8;font-weight:700}
+.pay{display:inline-block;font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:7px;margin-right:6px}
+.pay.pix{background:#d9f5f0;color:#0b6b5c}.pay.cash{background:#fff0c2;color:#7a5600}.pay.card{background:#ece6ff;color:#4a2fb0}
+.payline{font-size:13px;margin:8px 0}
+.money{display:flex;justify-content:space-between;align-items:baseline;border-top:1px dashed var(--line);margin-top:8px;padding-top:8px}
+.money small{color:var(--muted)}.money strong{font-size:21px}
+.acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.acts button{flex:1;min-width:110px;padding:13px 10px;font-size:14px}
+.go{background:var(--ok);color:#fff}.go2{background:#2f6fdf;color:#fff}.no{background:#f4dede;color:var(--bad)}.print{background:#efe8e3;color:var(--ink);flex:0 0 auto;min-width:0}
+.warn-sound{display:none;background:#fff3cd;color:#6b4e00;padding:9px 20px;font-size:14px;font-weight:600}
+.warn-sound.on{display:block}
+#gate{position:fixed;inset:0;background:#241f1de8;z-index:100;display:grid;place-items:center;padding:20px}
+#gate div{background:#fff;border-radius:20px;padding:34px;max-width:420px;text-align:center}
+#gate h2{margin:0 0 8px}#gate p{color:var(--muted);margin:0 0 20px}#gate button{background:var(--brand);color:#fff;font-size:18px;padding:16px 28px;width:100%}
+.login{max-width:380px;margin:12vh auto;padding:0 18px}.login input{display:block;width:100%;padding:13px;margin:10px 0;border:1px solid var(--line);border-radius:11px;font:inherit}.login button{width:100%;background:var(--brand);color:#fff}
+.toast{position:fixed;bottom:25px;left:50%;transform:translateX(-50%);background:#211e1b;color:#fff;padding:12px 19px;border-radius:14px;z-index:999;max-width:90%;text-align:center}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.board{grid-template-columns:1fr;padding:12px}.topbar{padding:10px 12px}}
+</style>
+<script src="./config.js"></script>
+</head>
+<body>
+<div id="gate"><div><h2>🔔 Central de pedidos</h2><p>Toque para iniciar. Isso libera o alerta sonoro, que fica tocando até alguém aceitar cada pedido novo.</p><button id="start">▶ Iniciar painel</button></div></div>
+<header class="topbar">
+ <div><h1>🍽 Central de pedidos</h1><span class="chip" id="chip"><i></i><span id="chiptext">conectando…</span></span></div>
+ <div class="controls">
+  <label><input type="checkbox" id="sound" checked> Alerta sonoro</label>
+  <label>Atualizar a cada <select id="interval"><option value="10">10 s</option><option value="15">15 s</option><option value="30">30 s</option><option value="60">60 s</option></select></label>
+  <button class="btn-light" id="refresh">↻ Atualizar agora</button>
+  <a class="btn-light" style="text-decoration:none;color:#fff;border-radius:11px" href="./admin.html">← Painel</a>
+ </div>
+</header>
+<div class="warn-sound" id="mutewarn">🔇 O alerta sonoro está desligado: pedidos novos não vão tocar.</div>
+<section class="stats">
+ <div class="stat s-new"><b id="n-new">0</b><span>Novos</span></div>
+ <div class="stat s-prep"><b id="n-prep">0</b><span>Em preparo</span></div>
+ <div class="stat s-out"><b id="n-out">0</b><span>Prontos / em entrega</span></div>
+ <div class="stat s-done"><b id="n-done">0</b><span>Finalizados (recentes)</span></div>
+</section>
+<main class="board" id="board">
+ <section class="col"><h2>🔴 Novos pedidos <em id="c-new">0</em></h2><div id="new"></div></section>
+ <section class="col"><h2>🟠 Em preparo <em id="c-prep">0</em></h2><div id="prep"></div></section>
+ <section class="col"><h2>🔵 Prontos / entrega <em id="c-out">0</em></h2><div id="out"></div></section>
+ <section class="col"><h2>🟢 Finalizados <em id="c-done">0</em></h2><div id="done"></div></section>
+</main>
+<script src="./orders.js" type="module"></script>
+</body>
 </html>
-

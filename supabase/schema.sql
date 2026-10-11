@@ -9,6 +9,9 @@ create table if not exists public.mf_records (
   constraint mf_table_allowed check(table_name in ('categories','products','addons','addon_groups','orders','banners','coupons','settings','loyalty','rewards'))
 );
 create index if not exists mf_records_table_date on public.mf_records(table_name,created_at);
+create index if not exists mf_orders_status on public.mf_records ((data->>'status')) where table_name='orders';
+create index if not exists mf_orders_coupon on public.mf_records ((data->>'coupon')) where table_name='orders';
+create index if not exists mf_loyalty_phone on public.mf_records ((data->>'phone')) where table_name='loyalty';
 alter table public.mf_records enable row level security;
 revoke all on public.mf_records from anon, authenticated, public;
 grant all on public.mf_records to service_role;
